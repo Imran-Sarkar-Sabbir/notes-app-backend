@@ -31,16 +31,26 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Missing token');
 
     let sub: string;
+    let iat: number;
     try {
-      ({ sub } = await this.jwt.verifyAsync<{ sub: string }>(token, {
-        algorithms: ['HS256'],
-      }));
+      ({ sub, iat } = await this.jwt.verifyAsync<{ sub: string; iat: number }>(
+        token,
+        {
+          algorithms: ['HS256'],
+        },
+      ));
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }
 
     const user = await this.users.findById(sub);
     if (!user) throw new UnauthorizedException('Account no longer exists');
+    if (
+      user.passwordChangedAt &&
+      iat < Math.floor(user.passwordChangedAt.getTime() / 1000)
+    ) {
+      throw new UnauthorizedException('Password changed, please log in again');
+    }
     req.user = user;
     return true;
   }

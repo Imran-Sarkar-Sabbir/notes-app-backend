@@ -79,6 +79,30 @@ describe('auth', () => {
     await api().get('/api/notes').set(as('garbage')).expect(401);
     await api().get('/api/health').expect(200);
   });
+
+  it('changing your password needs the current one and ends old sessions', async () => {
+    const { token: oldToken } = await register('Pia', 'pia@test.com');
+    await new Promise((r) => setTimeout(r, 1100));
+    const me = () => api().patch('/api/auth/me').set(as(oldToken));
+
+    await me().send({ password: 'brandnew123' }).expect(400);
+    await me()
+      .send({ password: 'brandnew123', currentPassword: 'wrong-one' })
+      .expect(400);
+    await me().send({ name: 'Pia R' }).expect(200);
+
+    const changed = await me()
+      .send({ password: 'brandnew123', currentPassword: 'password123' })
+      .expect(200);
+    expect(changed.body.user.passwordChangedAt).toBeUndefined();
+
+    await api().get('/api/auth/me').set(as(oldToken)).expect(401);
+    await api().get('/api/auth/me').set(as(changed.body.token)).expect(200);
+    await api()
+      .post('/api/auth/login')
+      .send({ email: 'pia@test.com', password: 'brandnew123' })
+      .expect(200);
+  });
 });
 
 describe('notes and roles', () => {

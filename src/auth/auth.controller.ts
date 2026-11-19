@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -26,7 +27,12 @@ const loginBody = z.object({
 });
 const updateMeBody = registerBody
   .pick({ name: true, password: true, interests: true })
-  .partial();
+  .partial()
+  .extend({ currentPassword: z.string().optional() })
+  .refine((b) => !b.password || b.currentPassword, {
+    message: 'Enter your current password to set a new one',
+    path: ['currentPassword'],
+  });
 
 @Controller('auth')
 export class AuthController {
@@ -72,10 +78,20 @@ export class AuthController {
   }
 
   @Patch('me')
-  updateMe(
+  async updateMe(
     @CurrentUser() me: UserDocument,
     @Body({ schema: updateMeBody }) body: z.infer<typeof updateMeBody>,
   ) {
-    return this.users.update(me._id, body);
+    const { currentPassword, ...changes } = body;
+    if (changes.password) {
+      const stored = await this.users.findForLogin(me.email);
+      if (
+        !stored ||
+        !(await bcrypt.compare(currentPassword ?? '', stored.password))
+      ) {
+        throw new BadRequestException('Current password is wrong');
+      }
+    }
+    return this.session(await this.users.update(me._id, changes));
   }
 }

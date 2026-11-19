@@ -15,6 +15,7 @@ const cleanInterests = (list: unknown[] = []) => [
     versionKey: false,
     transform: (_doc, ret) => {
       delete (ret as { password?: string }).password;
+      delete (ret as { passwordChangedAt?: Date }).passwordChangedAt;
       return ret;
     },
   },
@@ -34,6 +35,9 @@ export class User {
 
   @Prop({ type: [String], default: [], set: cleanInterests })
   interests: string[];
+
+  @Prop()
+  passwordChangedAt?: Date;
 }
 
 export type UserDocument = HydratedDocument<User>;
@@ -45,4 +49,5 @@ UserSchema.index({ interests: 1 });
 UserSchema.pre('save', async function () {
   if (!this.isModified('password')) return;
   this.password = await bcrypt.hash(this.password, 12);
+  if (!this.isNew) this.passwordChangedAt = new Date();
 });
